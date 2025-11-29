@@ -29,3 +29,28 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+@layer utilities {
+  .range-thumb-only {
+    pointer-events: none;
+  }
+
+  .range-thumb-only::-webkit-slider-thumb {
+    pointer-events: auto;
+    cursor: ew-resize;
+    -webkit-appearance: none;
+    width: 24px;
+    /* Slightly wider for easier grabbing */
+    height: 48px;
+    background: red;
+    /* Debug color, will be hidden by opacity-0 on parent */
+  }
+
+  .range-thumb-only::-moz-range-thumb {
+    pointer-events: auto;
+    cursor: ew-resize;
+    border: none;
+    width: 24px;
+    height: 48px;
+  }
+}

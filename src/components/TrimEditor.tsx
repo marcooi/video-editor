@@ -230,7 +230,7 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
                         onPointerDown={() => setIsDraggingStart(true)}
                         onPointerUp={() => setIsDraggingStart(false)}
                         onPointerLeave={() => setIsDraggingStart(false)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20 range-thumb-only"
                     />
 
                     {/* End Handle */}
@@ -248,7 +248,7 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
                         onPointerDown={() => setIsDraggingEnd(true)}
                         onPointerUp={() => setIsDraggingEnd(false)}
                         onPointerLeave={() => setIsDraggingEnd(false)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20 range-thumb-only"
                     />
 
                     {/* Visual Handles */}
