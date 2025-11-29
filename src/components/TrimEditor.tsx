@@ -59,7 +59,7 @@ const TimelineFrames = ({ videoUrl, duration }: { videoUrl: string, duration: nu
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
-            const count = 12;
+            const count = 30; // Increased count for longer timeline
             const interval = duration / count;
             const newThumbnails: string[] = [];
 
@@ -82,7 +82,7 @@ const TimelineFrames = ({ videoUrl, duration }: { videoUrl: string, duration: nu
                 });
 
                 canvas.width = 100;
-                canvas.height = 60;
+                canvas.height = 100; // Increased height for better resolution
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 newThumbnails.push(canvas.toDataURL());
             }
@@ -165,26 +165,28 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
 
 
     return (
-        <div className="w-full max-w-4xl mx-auto bg-slate-800 rounded-2xl overflow-hidden shadow-xl border border-slate-700">
-            <div className="relative aspect-video bg-black group">
-                <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    className="w-full h-full object-contain"
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onTimeUpdate={handleTimeUpdate}
-                    onClick={togglePlay}
-                />
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="bg-black/50 rounded-full p-4 backdrop-blur-sm">
-                        {isPlaying ? <Pause className="w-8 h-8 text-white" /> : <Play className="w-8 h-8 text-white" />}
+        <div className="w-full flex flex-col gap-8">
+            <div className="max-w-3xl w-full mx-auto bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800">
+                <div className="relative aspect-video group">
+                    <video
+                        ref={videoRef}
+                        src={videoUrl}
+                        className="w-full h-full object-contain"
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onTimeUpdate={handleTimeUpdate}
+                        onClick={togglePlay}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        <div className="bg-black/50 rounded-full p-4 backdrop-blur-sm">
+                            {isPlaying ? <Pause className="w-8 h-8 text-white" /> : <Play className="w-8 h-8 text-white" />}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="w-full bg-slate-900/50 p-6 rounded-xl border border-slate-800 space-y-6">
                 {/* Timeline Controls */}
-                <div className="relative h-12 bg-slate-700/50 rounded-lg select-none">
+                <div className="relative h-24 bg-slate-700/50 rounded-lg select-none mt-8">
                     <TimelineFrames videoUrl={videoUrl} duration={duration} />
 
                     <ThumbnailOverlay
@@ -253,16 +255,32 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
 
                     {/* Visual Handles */}
                     <div
-                        className="absolute top-0 bottom-0 w-4 bg-primary cursor-ew-resize flex items-center justify-center rounded-l-md -ml-2 hover:bg-primary/80 transition-colors"
+                        className="absolute top-0 bottom-0 w-3 bg-blue-500 cursor-ew-resize flex flex-col items-center justify-center rounded-l-md -ml-1.5 hover:bg-blue-400 transition-colors z-10"
                         style={{ left: `${(startTime / duration) * 100}%` }}
                     >
-                        <div className="w-1 h-4 bg-white/50 rounded-full" />
+                        <div className="absolute bottom-full mb-2 bg-white text-slate-900 text-xs font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                            {formatTime(startTime)}
+                            <div className="absolute left-1/2 -bottom-1 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-white"></div>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                        </div>
                     </div>
                     <div
-                        className="absolute top-0 bottom-0 w-4 bg-primary cursor-ew-resize flex items-center justify-center rounded-r-md -ml-2 hover:bg-primary/80 transition-colors"
+                        className="absolute top-0 bottom-0 w-3 bg-blue-500 cursor-ew-resize flex flex-col items-center justify-center rounded-r-md -ml-1.5 hover:bg-blue-400 transition-colors z-10"
                         style={{ left: `${(endTime / duration) * 100}%` }}
                     >
-                        <div className="w-1 h-4 bg-white/50 rounded-full" />
+                        <div className="absolute bottom-full mb-2 bg-white text-slate-900 text-xs font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                            {formatTime(endTime)}
+                            <div className="absolute left-1/2 -bottom-1 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-white"></div>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                        </div>
                     </div>
                 </div>
 
