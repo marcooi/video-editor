@@ -6,11 +6,12 @@ import { clsx } from 'clsx';
 import { VideoUploader } from './components/VideoUploader';
 import { TrimEditor } from './components/TrimEditor';
 import { MergeEditor } from './components/MergeEditor';
+import { VolumeEditor } from './components/VolumeEditor';
 import { ProcessingStatus } from './components/ProcessingStatus';
 
 function App() {
   const [loaded, setLoaded] = useState(false);
-  const [mode, setMode] = useState<'trim' | 'merge'>('trim');
+  const [mode, setMode] = useState<'trim' | 'merge' | 'volume'>('trim');
   const [files, setFiles] = useState<File[]>([]);
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
@@ -130,6 +131,43 @@ function App() {
     }
   };
 
+  const handleVolumeChange = async (volume: number) => {
+    if (!loaded || files.length === 0) return;
+
+    setProcessingStatus('processing');
+    setProgress(0);
+    const ffmpeg = ffmpegRef.current;
+    const file = files[0];
+    const inputName = 'input.mp4';
+    const outputName = 'output.mp4';
+
+    try {
+      await ffmpeg.writeFile(inputName, await fetchFile(file));
+
+      await ffmpeg.exec([
+        '-i', inputName,
+        '-filter:a', `volume=${volume}`,
+        '-c:v', 'copy', // Copy video stream
+        '-c:a', 'aac',  // Re-encode audio
+        outputName
+      ]);
+
+      const data = await ffmpeg.readFile(outputName);
+      const url = URL.createObjectURL(new Blob([data as any], { type: 'video/mp4' }));
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `volume-adjusted-${file.name}`;
+      a.click();
+
+      setProcessingStatus('completed');
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("Failed to adjust volume.");
+      setProcessingStatus('error');
+    }
+  };
+
   const reset = () => {
     setFiles([]);
     setProcessingStatus('idle');
@@ -178,6 +216,16 @@ function App() {
               <Film className="w-4 h-4" />
               Merge
             </button>
+            <button
+              onClick={() => { setMode('volume'); reset(); }}
+              className={clsx(
+                "px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                mode === 'volume' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white"
+              )}
+            >
+              <Film className="w-4 h-4" />
+              Volume
+            </button>
           </div>
 
           <a href="#" className="text-slate-400 hover:text-white transition-colors">
@@ -198,12 +246,14 @@ function App() {
           <div className="fade-in">
             <div className="text-center mb-12">
               <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400">
-                {mode === 'trim' ? 'Trim Video' : 'Merge Videos'}
+                {mode === 'trim' ? 'Trim Video' : mode === 'merge' ? 'Merge Videos' : 'Adjust Volume'}
               </h1>
               <p className="text-lg text-slate-400 max-w-2xl mx-auto">
                 {mode === 'trim'
                   ? 'Cut out unwanted parts of your video with frame-perfect precision.'
-                  : 'Combine multiple clips into a single seamless video file.'}
+                  : mode === 'merge'
+                    ? 'Combine multiple clips into a single seamless video file.'
+                    : 'Adjust the audio volume of your video file.'}
               </p>
             </div>
 
@@ -222,12 +272,19 @@ function App() {
                   onTrim={handleTrim}
                   onCancel={reset}
                 />
-              ) : (
+              ) : mode === 'merge' ? (
                 <MergeEditor
                   files={files}
                   onMerge={handleMerge}
                   onCancel={reset}
                   onAddFiles={(newFiles) => setFiles([...files, ...newFiles])}
+                />
+              ) : (
+                <VolumeEditor
+                  file={files[0]}
+                  ffmpeg={ffmpegRef.current}
+                  onSave={handleVolumeChange}
+                  onCancel={reset}
                 />
               )
             )}
