@@ -1,73 +1,77 @@
-# React + TypeScript + Vite
+# VideoStudio - Browser-Based Video Editor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+VideoStudio is a powerful, privacy-focused video editor that runs entirely in your web browser. Built with React and FFmpeg.wasm, it allows you to edit videos without uploading them to a server.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Trim Video**: Cut out unwanted parts of your video with a precise timeline editor.
+- **Merge Videos**: Combine multiple video clips into a single seamless file.
+- **Adjust Volume**: Boost or lower the audio volume of your video (up to 200%) with real-time preview.
+- **Privacy First**: All processing happens locally on your device. Your videos never leave your computer.
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Prerequisites
 
-## Expanding the ESLint configuration
+- Node.js (v18 or higher recommended)
+- npm (Node Package Manager)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Installation
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Clone the repository or download the source code.
+2. Navigate to the project directory:
+   ```bash
+   cd video-editor
+   ```
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Running Locally
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+To start the development server:
+
+```bash
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open your browser and visit `http://localhost:5173` (or the URL shown in your terminal).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Building for Production
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+To create a production build:
+
+```bash
+npm run build
 ```
+
+The built files will be in the `dist` directory.
+
+### Docker Deployment
+
+To run the application using Docker:
+
+1. Build and start the container:
+   ```bash
+   docker-compose up -d --build
+   ```
+
+2. Access the application at `http://localhost:8080`.
+
+The Docker setup includes a production-ready Nginx configuration with the required security headers (`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`) pre-configured.
+
+## Technical Details
+
+- **Framework**: React + Vite
+- **Video Processing**: FFmpeg.wasm (WebAssembly port of FFmpeg)
+- **Styling**: Tailwind CSS
+- **Icons**: Lucide React
+
+### Important Note on Headers
+
+This project uses `SharedArrayBuffer` for FFmpeg.wasm, which requires specific security headers:
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Embedder-Policy: require-corp`
+
+These are already configured in `vite.config.ts` for the development server. If deploying to a static host (like Vercel, Netlify, or GitHub Pages), you must ensure these headers are set in the hosting configuration for the app to function correctly.
