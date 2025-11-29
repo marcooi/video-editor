@@ -56,3 +56,9 @@ To use `SharedArrayBuffer` (required by FFmpeg.wasm), the server must serve the 
 
 - **Adding Filters**: To add video filters (brightness, contrast), create a new editor component (e.g., `FilterEditor.tsx`) and add a new mode in `App.tsx`. Use FFmpeg's `-vf` flag.
 - **Performance**: Large files may take time to process. Consider implementing a web worker for UI responsiveness if moving heavy logic off the main thread (though FFmpeg.wasm already runs in a worker).
+
+## How to Continue Development
+
+To resume work on this project with an AI assistant, use the following prompt to ensure they have full context:
+
+> "I am working on a browser-based video editor project. Please read the `WALKTHROUGH.md` file in the root directory to understand the project architecture, key components, and current state. Once you've read it, I'd like to [insert your next goal here]."
