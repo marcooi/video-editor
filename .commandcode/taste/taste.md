@@ -1,0 +1,3 @@
+- Communicates in Indonesian (Bahasa Indonesia); expects replies in Indonesian. Confidence: 0.75
+- Develops on Windows (PowerShell) using the VS Code integrated terminal. Confidence: 0.6
+- Wants pre-existing build/lint errors fixed too, not just errors introduced by the current change; "that error was already there" is not an acceptable stopping point. Confidence: 0.65

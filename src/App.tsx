@@ -9,43 +9,59 @@ import { MergeEditor } from './components/MergeEditor';
 import { VolumeEditor } from './components/VolumeEditor';
 import { ProcessingStatus } from './components/ProcessingStatus';
 
+const toVideoBlob = (data: Uint8Array | string) =>
+  typeof data === 'string'
+    ? new Blob([data], { type: 'video/mp4' })
+    : new Blob([data as Uint8Array<ArrayBuffer>], { type: 'video/mp4' });
+
 function App() {
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<'trim' | 'merge' | 'volume'>('trim');
   const [files, setFiles] = useState<File[]>([]);
+  const [videoUrl, setVideoUrl] = useState('');
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const ffmpegRef = useRef(new FFmpeg());
   const messageRef = useRef<HTMLParagraphElement>(null);
-
-  const load = async () => {
-    const baseURL = '/ffmpeg';
-    const ffmpeg = ffmpegRef.current;
-    ffmpeg.on('log', ({ message }) => {
-      if (messageRef.current) messageRef.current.innerHTML = message;
-      console.log(message);
-    });
-
-    ffmpeg.on('progress', ({ progress }) => {
-      setProgress(progress * 100);
-    });
-
-    try {
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      });
-      setLoaded(true);
-    } catch (error) {
-      console.error(error);
-      setErrorMessage(`Failed to load FFmpeg: ${(error as Error).message}`);
-      setProcessingStatus('error');
-    }
-  };
+  const loadStartedRef = useRef(false);
 
   useEffect(() => {
-    load();
+    const baseURL = '/ffmpeg';
+    const ffmpeg = ffmpegRef.current;
+
+    const handleLog = ({ message }: { message: string }) => {
+      if (messageRef.current) messageRef.current.innerHTML = message;
+      console.log(message);
+    };
+
+    const handleProgress = ({ progress }: { progress: number }) => {
+      setProgress(progress * 100);
+    };
+
+    ffmpeg.on('log', handleLog);
+    ffmpeg.on('progress', handleProgress);
+
+    if (!loadStartedRef.current) {
+      loadStartedRef.current = true;
+
+      Promise.all([
+        toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      ])
+        .then(([coreURL, wasmURL]) => ffmpeg.load({ coreURL, wasmURL }))
+        .then(() => setLoaded(true))
+        .catch((error: unknown) => {
+          console.error(error);
+          setErrorMessage(`Failed to load FFmpeg: ${(error as Error).message}`);
+          setProcessingStatus('error');
+        });
+    }
+
+    return () => {
+      ffmpeg.off('log', handleLog);
+      ffmpeg.off('progress', handleProgress);
+    };
   }, []);
 
   const handleTrim = async (start: number, end: number) => {
@@ -71,7 +87,7 @@ function App() {
       ]);
 
       const data = await ffmpeg.readFile(outputName);
-      const url = URL.createObjectURL(new Blob([data as any], { type: 'video/mp4' }));
+      const url = URL.createObjectURL(toVideoBlob(data));
 
       // Download the file
       const a = document.createElement('a');
@@ -116,7 +132,7 @@ function App() {
       ]);
 
       const data = await ffmpeg.readFile(outputName);
-      const url = URL.createObjectURL(new Blob([data as any], { type: 'video/mp4' }));
+      const url = URL.createObjectURL(toVideoBlob(data));
 
       const a = document.createElement('a');
       a.href = url;
@@ -153,7 +169,7 @@ function App() {
       ]);
 
       const data = await ffmpeg.readFile(outputName);
-      const url = URL.createObjectURL(new Blob([data as any], { type: 'video/mp4' }));
+      const url = URL.createObjectURL(toVideoBlob(data));
 
       const a = document.createElement('a');
       a.href = url;
@@ -168,7 +184,15 @@ function App() {
     }
   };
 
+  const handleUpload = (newFiles: File[]) => {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoUrl(mode === 'merge' || newFiles.length === 0 ? '' : URL.createObjectURL(newFiles[0]));
+    setFiles(newFiles);
+  };
+
   const reset = () => {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoUrl('');
     setFiles([]);
     setProcessingStatus('idle');
     setProgress(0);
@@ -260,15 +284,14 @@ function App() {
             {files.length === 0 ? (
               <div className="max-w-2xl mx-auto">
                 <VideoUploader
-                  onUpload={setFiles}
+                  onUpload={handleUpload}
                   multiple={mode === 'merge'}
                 />
               </div>
             ) : (
               mode === 'trim' ? (
                 <TrimEditor
-                  file={files[0]}
-                  ffmpeg={ffmpegRef.current}
+                  videoUrl={videoUrl}
                   onTrim={handleTrim}
                   onCancel={reset}
                 />
@@ -281,8 +304,7 @@ function App() {
                 />
               ) : (
                 <VolumeEditor
-                  file={files[0]}
-                  ffmpeg={ffmpegRef.current}
+                  videoUrl={videoUrl}
                   onSave={handleVolumeChange}
                   onCancel={reset}
                 />

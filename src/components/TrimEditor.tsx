@@ -1,13 +1,33 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Play, Pause, Scissors, RotateCcw } from 'lucide-react';
 
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-
+const MIN_TRIM_DURATION = 1;
 
 const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const formatEditableTime = (seconds: number) => {
+    const totalTenths = Math.round(seconds * 10);
+    const mins = Math.floor(totalTenths / 600);
+    const secs = (totalTenths % 600) / 10;
+    return `${mins}:${secs.toFixed(1).padStart(4, '0')}`;
+};
+
+const parseTimeInput = (value: string): number | null => {
+    const normalized = value.trim().replace(',', '.');
+    if (!normalized) return null;
+
+    const parts = normalized.split(':');
+    if (parts.length > 3) return null;
+
+    const numbers = parts.map((part) => (part.trim() === '' ? NaN : Number(part)));
+    if (numbers.some((num) => !Number.isFinite(num) || num < 0)) return null;
+
+    const multipliers = parts.length === 1 ? [1] : parts.length === 2 ? [60, 1] : [3600, 60, 1];
+    return numbers.reduce((total, num, index) => total + num * multipliers[index], 0);
 };
 
 const ThumbnailOverlay = ({ videoUrl, time, duration, visible }: { videoUrl: string, time: number, duration: number, visible: boolean }) => {
@@ -104,29 +124,90 @@ const TimelineFrames = ({ videoUrl, duration }: { videoUrl: string, duration: nu
     );
 };
 
+interface TimeInputProps {
+    label: string;
+    value: number;
+    min: number;
+    max: number;
+    disabled?: boolean;
+    onCommit: (value: number) => void;
+}
+
+const TimeInput: React.FC<TimeInputProps> = ({ label, value, min, max, disabled, onCommit }) => {
+    const [draft, setDraft] = useState<string | null>(null);
+    const skipCommitRef = useRef(false);
+    const displayValue = draft ?? formatEditableTime(value);
+
+    const commit = () => {
+        if (skipCommitRef.current) {
+            skipCommitRef.current = false;
+            setDraft(null);
+            return;
+        }
+
+        if (draft === null || draft === formatEditableTime(value)) {
+            setDraft(null);
+            return;
+        }
+
+        const parsed = parseTimeInput(draft);
+        if (parsed === null) {
+            setDraft(null);
+            return;
+        }
+
+        const clamped = Math.min(Math.max(parsed, min), max);
+        setDraft(null);
+        if (clamped !== value) {
+            onCommit(clamped);
+        }
+    };
+
+    return (
+        <label className="flex flex-col gap-1">
+            <span className="text-xs uppercase tracking-wider text-slate-500">{label}</span>
+            <input
+                type="text"
+                value={displayValue}
+                disabled={disabled}
+                spellCheck={false}
+                autoComplete="off"
+                title="Format: mm:ss, hh:mm:ss, or seconds (e.g. 75 or 1:15)"
+                onChange={(e) => setDraft(e.target.value)}
+                onFocus={(e) => {
+                    setDraft(formatEditableTime(value));
+                    e.target.select();
+                }}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.currentTarget.blur();
+                    } else if (e.key === 'Escape') {
+                        skipCommitRef.current = true;
+                        e.currentTarget.blur();
+                    }
+                }}
+                className="w-24 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white text-center focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
+            />
+        </label>
+    );
+};
+
 interface TrimEditorProps {
-    file: File;
-    ffmpeg: FFmpeg;
+    videoUrl: string;
     onTrim: (start: number, end: number, volume: number) => void;
     onCancel: () => void;
 }
 
-export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }) => {
+export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCancel }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [startTime, setStartTime] = useState(0);
     const [endTime, setEndTime] = useState(0);
-    const [videoUrl, setVideoUrl] = useState<string>("");
     const [isDraggingStart, setIsDraggingStart] = useState(false);
     const [isDraggingEnd, setIsDraggingEnd] = useState(false);
-
-    useEffect(() => {
-        const url = URL.createObjectURL(file);
-        setVideoUrl(url);
-        return () => URL.revokeObjectURL(url);
-    }, [file]);
 
     const handleLoadedMetadata = () => {
         if (videoRef.current) {
@@ -162,6 +243,21 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
         }
     };
 
+    const updateStartTime = (time: number) => {
+        const maxStart = Math.max(0, endTime - MIN_TRIM_DURATION);
+        const next = Math.min(Math.max(time, 0), maxStart);
+        setStartTime(next);
+        setCurrentTime(next);
+        if (videoRef.current) videoRef.current.currentTime = next;
+    };
+
+    const updateEndTime = (time: number) => {
+        const minEnd = Math.min(duration, startTime + MIN_TRIM_DURATION);
+        const next = Math.max(Math.min(time, duration), minEnd);
+        setEndTime(next);
+        setCurrentTime(next);
+        if (videoRef.current) videoRef.current.currentTime = next;
+    };
 
 
     return (
@@ -224,11 +320,7 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
                         max={duration}
                         step={0.1}
                         value={startTime}
-                        onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setStartTime(Math.min(val, endTime - 1));
-                            if (videoRef.current) videoRef.current.currentTime = val;
-                        }}
+                        onChange={(e) => updateStartTime(Number(e.target.value))}
                         onPointerDown={() => setIsDraggingStart(true)}
                         onPointerUp={() => setIsDraggingStart(false)}
                         onPointerLeave={() => setIsDraggingStart(false)}
@@ -242,11 +334,7 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
                         max={duration}
                         step={0.1}
                         value={endTime}
-                        onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setEndTime(Math.max(val, startTime + 1));
-                            if (videoRef.current) videoRef.current.currentTime = val;
-                        }}
+                        onChange={(e) => updateEndTime(Number(e.target.value))}
                         onPointerDown={() => setIsDraggingEnd(true)}
                         onPointerUp={() => setIsDraggingEnd(false)}
                         onPointerLeave={() => setIsDraggingEnd(false)}
@@ -284,11 +372,30 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ file, onTrim, onCancel }
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                    <div className="flex gap-4 text-sm font-mono text-slate-400">
-                        <div>Start: <span className="text-white">{formatTime(startTime)}</span></div>
-                        <div>End: <span className="text-white">{formatTime(endTime)}</span></div>
-                        <div>Duration: <span className="text-primary">{formatTime(endTime - startTime)}</span></div>
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <TimeInput
+                            label="Start"
+                            value={startTime}
+                            min={0}
+                            max={Math.max(0, endTime - MIN_TRIM_DURATION)}
+                            disabled={!duration}
+                            onCommit={updateStartTime}
+                        />
+                        <TimeInput
+                            label="End"
+                            value={endTime}
+                            min={Math.min(duration, startTime + MIN_TRIM_DURATION)}
+                            max={duration}
+                            disabled={!duration}
+                            onCommit={updateEndTime}
+                        />
+                        <div className="text-sm font-mono text-slate-400 pb-2">
+                            Duration: <span className="text-primary">{formatTime(endTime - startTime)}</span>
+                        </div>
+                        <div className="text-xs text-slate-500 pb-2.5">
+                            Type mm:ss, hh:mm:ss, or seconds
+                        </div>
                     </div>
 
                     <div className="flex gap-3">

@@ -1,15 +1,13 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Play, Pause, Volume2, RotateCcw, Save } from 'lucide-react';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
 
 interface VolumeEditorProps {
-    file: File;
-    ffmpeg: FFmpeg;
+    videoUrl: string;
     onSave: (volume: number) => void;
     onCancel: () => void;
 }
 
-export const VolumeEditor: React.FC<VolumeEditorProps> = ({ file, onSave, onCancel }) => {
+export const VolumeEditor: React.FC<VolumeEditorProps> = ({ videoUrl, onSave, onCancel }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -17,20 +15,15 @@ export const VolumeEditor: React.FC<VolumeEditorProps> = ({ file, onSave, onCanc
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [volume, setVolume] = useState(1.0);
-    const [videoUrl, setVideoUrl] = useState<string>("");
-
-    useEffect(() => {
-        const url = URL.createObjectURL(file);
-        setVideoUrl(url);
-        return () => URL.revokeObjectURL(url);
-    }, [file]);
 
     // Initialize Web Audio API
     useEffect(() => {
         if (!videoRef.current || audioContextRef.current || !videoUrl) return;
 
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const AudioContextClass =
+                window.AudioContext ||
+                (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
             const audioCtx = new AudioContextClass();
             const source = audioCtx.createMediaElementSource(videoRef.current);
             const gainNode = audioCtx.createGain();
