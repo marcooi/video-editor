@@ -34,16 +34,25 @@ const ThumbnailOverlay = ({ videoUrl, time, duration, visible }: { videoUrl: str
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
-        if (videoRef.current && visible) {
-            videoRef.current.currentTime = time;
-        }
-    }, [time, visible]);
+        const video = videoRef.current;
+        if (!video) return;
 
-    if (!visible) return null;
+        const seekToTime = () => {
+            const maxTime = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.05) : time;
+            video.currentTime = Math.min(Math.max(time, 0), maxTime);
+        };
+
+        if (video.readyState >= 1) {
+            seekToTime();
+        } else {
+            video.addEventListener('loadedmetadata', seekToTime, { once: true });
+            return () => video.removeEventListener('loadedmetadata', seekToTime);
+        }
+    }, [time]);
 
     return (
         <div
-            className="absolute bottom-full mb-3 transform -translate-x-1/2 z-30 pointer-events-none"
+            className={`absolute bottom-full mb-3 transform -translate-x-1/2 z-30 pointer-events-none ${visible ? 'opacity-100' : 'opacity-0'}`}
             style={{ left: `${(time / duration) * 100}%` }}
         >
             <div className="w-32 bg-slate-900 rounded-lg border border-slate-600 shadow-xl overflow-hidden">
@@ -201,6 +210,7 @@ interface TrimEditorProps {
 
 export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCancel }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const timelineRef = useRef<HTMLDivElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -221,7 +231,7 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCanc
         if (videoRef.current) {
             const time = videoRef.current.currentTime;
             setCurrentTime(time);
-            if (time >= endTime) {
+            if (isPlaying && time >= endTime) {
                 videoRef.current.pause();
                 setIsPlaying(false);
                 videoRef.current.currentTime = startTime;
@@ -259,6 +269,68 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCanc
         if (videoRef.current) videoRef.current.currentTime = next;
     };
 
+    const getTimeFromClientX = (clientX: number) => {
+        const rect = timelineRef.current?.getBoundingClientRect();
+        if (!rect || rect.width === 0 || duration <= 0) return null;
+        const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
+        return ratio * duration;
+    };
+
+    const startDragging = (handle: 'start' | 'end', event: React.PointerEvent<HTMLDivElement>) => {
+        const time = getTimeFromClientX(event.clientX);
+        if (time === null) return;
+
+        event.preventDefault();
+        event.currentTarget.focus();
+        event.currentTarget.setPointerCapture(event.pointerId);
+
+        if (isPlaying && videoRef.current) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+
+        if (handle === 'start') {
+            setIsDraggingStart(true);
+            updateStartTime(time);
+        } else {
+            setIsDraggingEnd(true);
+            updateEndTime(time);
+        }
+    };
+
+    const moveDragging = (handle: 'start' | 'end', event: React.PointerEvent<HTMLDivElement>) => {
+        const isDragging = handle === 'start' ? isDraggingStart : isDraggingEnd;
+        if (!isDragging) return;
+
+        const time = getTimeFromClientX(event.clientX);
+        if (time === null) return;
+
+        if (handle === 'start') {
+            updateStartTime(time);
+        } else {
+            updateEndTime(time);
+        }
+    };
+
+    const stopDragging = (handle: 'start' | 'end') => {
+        if (handle === 'start') {
+            setIsDraggingStart(false);
+        } else {
+            setIsDraggingEnd(false);
+        }
+    };
+
+    const handleHandleKeyDown = (handle: 'start' | 'end', event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+        event.preventDefault();
+        const delta = (event.shiftKey ? 1 : 0.1) * (event.key === 'ArrowRight' ? 1 : -1);
+        if (handle === 'start') {
+            updateStartTime(startTime + delta);
+        } else {
+            updateEndTime(endTime + delta);
+        }
+    };
 
     return (
         <div className="w-full flex flex-col gap-8">
@@ -282,7 +354,7 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCanc
 
             <div className="w-full bg-slate-900/50 p-6 rounded-xl border border-slate-800 space-y-6">
                 {/* Timeline Controls */}
-                <div className="relative h-24 bg-slate-700/50 rounded-lg select-none mt-8">
+                <div ref={timelineRef} className="relative h-24 bg-slate-700/50 rounded-lg select-none mt-8">
                     <TimelineFrames videoUrl={videoUrl} duration={duration} />
 
                     <ThumbnailOverlay
@@ -309,65 +381,68 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCanc
 
                     {/* Playhead */}
                     <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-white z-10"
+                        className="absolute top-0 bottom-0 w-0.5 bg-white z-10 pointer-events-none"
                         style={{ left: `${(currentTime / duration) * 100}%` }}
                     />
+                    <div
+                        className={`absolute bottom-full mb-2 -translate-x-1/2 px-2 py-1 rounded bg-white text-slate-900 text-xs font-bold shadow-lg whitespace-nowrap pointer-events-none tabular-nums transition-opacity ${isDraggingStart || isDraggingEnd ? 'opacity-0' : 'opacity-100'}`}
+                        style={{ left: `${(currentTime / duration) * 100}%` }}
+                    >
+                        {formatEditableTime(currentTime)}
+                        <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 rotate-45 w-2 h-2 bg-white" />
+                    </div>
 
                     {/* Start Handle */}
-                    <input
-                        type="range"
-                        min={0}
-                        max={duration}
-                        step={0.1}
-                        value={startTime}
-                        onChange={(e) => updateStartTime(Number(e.target.value))}
-                        onPointerDown={() => setIsDraggingStart(true)}
-                        onPointerUp={() => setIsDraggingStart(false)}
-                        onPointerLeave={() => setIsDraggingStart(false)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20 range-thumb-only"
-                    />
-
-                    {/* End Handle */}
-                    <input
-                        type="range"
-                        min={0}
-                        max={duration}
-                        step={0.1}
-                        value={endTime}
-                        onChange={(e) => updateEndTime(Number(e.target.value))}
-                        onPointerDown={() => setIsDraggingEnd(true)}
-                        onPointerUp={() => setIsDraggingEnd(false)}
-                        onPointerLeave={() => setIsDraggingEnd(false)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20 range-thumb-only"
-                    />
-
-                    {/* Visual Handles */}
                     <div
-                        className="absolute top-0 bottom-0 w-3 bg-blue-500 cursor-ew-resize flex flex-col items-center justify-center rounded-l-md -ml-1.5 hover:bg-blue-400 transition-colors z-10"
+                        role="slider"
+                        tabIndex={0}
+                        aria-label="Trim start"
+                        aria-valuemin={0}
+                        aria-valuemax={duration}
+                        aria-valuenow={startTime}
+                        aria-valuetext={formatTime(startTime)}
+                        onPointerDown={(event) => startDragging('start', event)}
+                        onPointerMove={(event) => moveDragging('start', event)}
+                        onPointerUp={() => stopDragging('start')}
+                        onPointerCancel={() => stopDragging('start')}
+                        onLostPointerCapture={() => stopDragging('start')}
+                        onKeyDown={(event) => handleHandleKeyDown('start', event)}
+                        className="absolute top-0 bottom-0 -ml-3 w-6 flex justify-center cursor-ew-resize z-20 touch-none focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         style={{ left: `${(startTime / duration) * 100}%` }}
                     >
-                        <div className="absolute bottom-full mb-2 bg-white text-slate-900 text-xs font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap">
-                            {formatTime(startTime)}
-                            <div className="absolute left-1/2 -bottom-1 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-white"></div>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
-                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
-                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                        <div className="h-full w-3 bg-blue-500 rounded-l-md hover:bg-blue-400 transition-colors flex flex-col items-center justify-center">
+                            <div className="flex flex-col gap-0.5">
+                                <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                            </div>
                         </div>
                     </div>
+
+                    {/* End Handle */}
                     <div
-                        className="absolute top-0 bottom-0 w-3 bg-blue-500 cursor-ew-resize flex flex-col items-center justify-center rounded-r-md -ml-1.5 hover:bg-blue-400 transition-colors z-10"
+                        role="slider"
+                        tabIndex={0}
+                        aria-label="Trim end"
+                        aria-valuemin={0}
+                        aria-valuemax={duration}
+                        aria-valuenow={endTime}
+                        aria-valuetext={formatTime(endTime)}
+                        onPointerDown={(event) => startDragging('end', event)}
+                        onPointerMove={(event) => moveDragging('end', event)}
+                        onPointerUp={() => stopDragging('end')}
+                        onPointerCancel={() => stopDragging('end')}
+                        onLostPointerCapture={() => stopDragging('end')}
+                        onKeyDown={(event) => handleHandleKeyDown('end', event)}
+                        className="absolute top-0 bottom-0 -ml-3 w-6 flex justify-center cursor-ew-resize z-20 touch-none focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         style={{ left: `${(endTime / duration) * 100}%` }}
                     >
-                        <div className="absolute bottom-full mb-2 bg-white text-slate-900 text-xs font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap">
-                            {formatTime(endTime)}
-                            <div className="absolute left-1/2 -bottom-1 transform -translate-x-1/2 rotate-45 w-2 h-2 bg-white"></div>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
-                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
-                            <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                        <div className="h-full w-3 bg-blue-500 rounded-r-md hover:bg-blue-400 transition-colors flex flex-col items-center justify-center">
+                            <div className="flex flex-col gap-0.5">
+                                <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-white rounded-full" />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -390,6 +465,9 @@ export const TrimEditor: React.FC<TrimEditorProps> = ({ videoUrl, onTrim, onCanc
                             disabled={!duration}
                             onCommit={updateEndTime}
                         />
+                        <div className="text-sm font-mono text-slate-400 pb-2">
+                            Playhead: <span className="text-white">{formatEditableTime(currentTime)}</span>
+                        </div>
                         <div className="text-sm font-mono text-slate-400 pb-2">
                             Duration: <span className="text-primary">{formatTime(endTime - startTime)}</span>
                         </div>
